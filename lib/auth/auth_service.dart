@@ -31,7 +31,7 @@ class AuthService {
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.code);
+      throw Exception(e.message ?? e.code);
     }
   }
 
@@ -56,7 +56,36 @@ class AuthService {
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.code);
+      throw Exception(e.message ?? e.code);
+    }
+  }
+
+  // Fungsi hapus akun
+  Future<void> deleteAccount() async {
+    try {
+      final User? user = _auth.currentUser;
+
+      if (user == null) {
+        throw Exception("User tidak ditemukan");
+      }
+
+      final String uid = user.uid;
+
+      // Hapus data user di Firestore
+      await _firestore.collection("user").doc(uid).delete();
+
+      // Hapus akun dari Firebase Authentication
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == "requires-recent-login") {
+        throw Exception(
+          "Untuk menghapus akun, silakan logout lalu login kembali terlebih dahulu.",
+        );
+      } else {
+        throw Exception(e.message ?? e.code);
+      }
+    } catch (e) {
+      throw Exception(e.toString());
     }
   }
 
