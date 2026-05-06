@@ -5,14 +5,15 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-   User? getCurrentUser() {
+  User? getCurrentUser() {
     return _auth.currentUser;
   }
 
-
+  // Fungsi register/sign-up
   Future<UserCredential> signUpWithEmailPassword(
     String email,
     String password,
+    String username,
   ) async {
     try {
       UserCredential userCredential =
@@ -21,10 +22,11 @@ class AuthService {
         password: password,
       );
 
-      
       await _firestore.collection("user").doc(userCredential.user!.uid).set({
         "uid": userCredential.user!.uid,
         "email": email,
+        "username": username,
+        "createdAt": FieldValue.serverTimestamp(),
       });
 
       return userCredential;
@@ -33,23 +35,24 @@ class AuthService {
     }
   }
 
-  // Fungsi untuk login/sign-in
+  // Fungsi login/sign-in
   Future<UserCredential> signInWithEmailPassword(
     String email,
     String password,
   ) async {
     try {
-      //USER YANG TERDAFTAR 
       UserCredential userCredential =
           await _auth.signInWithEmailAndPassword(
         email: email,
-        password: password
+        password: password,
       );
-      // menyimpan data user di dokumen yang beda
-      _firestore.collection("user").doc(userCredential.user!.uid).set({
+
+      // Jangan timpa username saat login
+      await _firestore.collection("user").doc(userCredential.user!.uid).set({
         "uid": userCredential.user!.uid,
         "email": email,
-      });
+        "lastLogin": FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
@@ -57,7 +60,7 @@ class AuthService {
     }
   }
 
-  // Fungsi untuk logout/sign-out
+  // Fungsi logout/sign-out
   Future<void> signOut() async {
     return await _auth.signOut();
   }
