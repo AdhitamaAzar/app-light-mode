@@ -7,26 +7,43 @@ class ChatService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   Stream<List<Map<String, dynamic>>> getUserStream() {
-    return _firestore
-        .collection("user")
-        .snapshots()
-        .map((snapshot){
-          return snapshot.docs.map((doc){
-            final user = doc.data();
+    return _firestore.collection("user").snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final user = doc.data();
 
-            return user;
-          }).toList();
-        });
+        return {
+          ...user,
+          'uid': doc.id,
+        };
+      }).toList();
+    });
   }
-   
-  // mengirim pesan
-  Future<void> sendMessage(String receiverID, String message) async{
-    //mendapatkan info user
+
+  Future<String> getUsernameByUid(String uid) async {
+    try {
+      final doc = await _firestore.collection("user").doc(uid).get();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+
+        return data['username'] ??
+            data['fullname'] ??
+            data['name'] ??
+            data['email'] ??
+            'Unknown User';
+      }
+
+      return 'Unknown User';
+    } catch (e) {
+      return 'Unknown User';
+    }
+  }
+
+  Future<void> sendMessage(String receiverID, String message) async {
     final String currentUserID = _auth.currentUser!.uid;
     final String currentUserEmail = _auth.currentUser!.email!;
     final Timestamp timestamp = Timestamp.now();
 
-    // membuat pesan baru
     Message newMessage = Message(
       senderID: currentUserID,
       senderEmail: currentUserEmail,
@@ -35,31 +52,27 @@ class ChatService {
       timestamp: timestamp,
     );
 
-    // membuat ID chat room berdasarkan ID user yang terlibat
     List<String> ids = [currentUserID, receiverID];
     ids.sort();
     String chatRoomID = ids.join("_");
 
-    // membuat pesan baru
     await _firestore
-      .collection("chatRooms")
-      .doc(chatRoomID)
-      .collection("messages")
-      .add(newMessage.toMap());
+        .collection("chatRooms")
+        .doc(chatRoomID)
+        .collection("messages")
+        .add(newMessage.toMap());
   }
 
-  // mendapatkan pesan
   Stream<QuerySnapshot> getMessages(String userID, otherUserID) {
-    // membuat ID chat room berdasarkan ID user yang terlibat
     List<String> ids = [userID, otherUserID];
     ids.sort();
     String chatRoomID = ids.join("_");
 
     return _firestore
-      .collection("chatRooms")
-      .doc(chatRoomID)
-      .collection("messages")
-      .orderBy("timestamp", descending: false)
-      .snapshots();
+        .collection("chatRooms")
+        .doc(chatRoomID)
+        .collection("messages")
+        .orderBy("timestamp", descending: false)
+        .snapshots();
   }
 }

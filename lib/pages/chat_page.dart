@@ -5,14 +5,14 @@ import 'package:light_mode/components/chat_bubbles.dart';
 import 'package:light_mode/components/id_textfield.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class ChatPage extends StatelessWidget{
+class ChatPage extends StatelessWidget {
   final String receiverEmail;
   final String receiverID;
 
   ChatPage({
-    super.key, 
+    super.key,
     required this.receiverEmail,
-    required this.receiverID
+    required this.receiverID,
   });
 
   final TextEditingController _messageController = TextEditingController();
@@ -20,18 +20,31 @@ class ChatPage extends StatelessWidget{
   final ChatService _chatService = ChatService();
   final AuthService _authService = AuthService();
 
-  void sendMessage()async {
-    
-    if(_messageController.text.isNotEmpty){
-      await _chatService.sendMessage(receiverID, _messageController.text);
+  void sendMessage() async {
+    if (_messageController.text.trim().isNotEmpty) {
+      await _chatService.sendMessage(
+        receiverID,
+        _messageController.text.trim(),
+      );
       _messageController.clear();
     }
   }
 
   @override
-  Widget build(BuildContext context){
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(receiverEmail)),
+      appBar: AppBar(
+        title: FutureBuilder<String>(
+          future: _chatService.getUsernameByUid(receiverID),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Text("Loading...");
+            }
+
+            return Text(snapshot.data ?? receiverEmail);
+          },
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -39,54 +52,63 @@ class ChatPage extends StatelessWidget{
           ),
           _buildUserInput(),
         ],
-      )
-    ); 
-  }
-
-  Widget _buildMessageList(){
-    String senderID = _authService.getCurrentUser()!.uid;
-    return StreamBuilder(
-      stream: _chatService.getMessages(senderID, receiverID),
-      builder: (context, snapshot){
-        //error
-        if(snapshot.hasError){
-          return const Text("Error");
-        }
-        //loading
-        if(snapshot.connectionState == ConnectionState.waiting){
-          return const Text("Loading...");
-        }
-        return ListView(
-          children: snapshot.data!.docs.map(
-            (doc) => _buildMessageItem(doc)).toList()
-        );
-      }
+      ),
     );
   }
 
-  Widget _buildMessageItem(DocumentSnapshot doc){
+  Widget _buildMessageList() {
+    String senderID = _authService.getCurrentUser()!.uid;
+
+    return StreamBuilder(
+      stream: _chatService.getMessages(senderID, receiverID),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text("Error"),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Text("Loading..."),
+          );
+        }
+
+        return ListView(
+          children: snapshot.data!.docs
+              .map((doc) => _buildMessageItem(doc))
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageItem(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
-    bool isCurrentUser = data['senderID'] == _authService.getCurrentUser()!.uid;
+    bool isCurrentUser =
+        data['senderID'] == _authService.getCurrentUser()!.uid;
 
-    var alignment = isCurrentUser ? Alignment.centerRight : Alignment.centerLeft;
+    var alignment =
+        isCurrentUser ? Alignment.centerRight : Alignment.centerLeft;
 
     return Container(
       alignment: alignment,
       padding: const EdgeInsets.all(8),
       child: Column(
-        crossAxisAlignment: isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: [
-        ChatBubble(
-          message: data['message'] ?? "", 
-          isCurrentUser: isCurrentUser
-        )
-      ],
+        crossAxisAlignment:
+            isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          ChatBubble(
+            message: data['message'] ?? "",
+            isCurrentUser: isCurrentUser,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildUserInput(){
+  Widget _buildUserInput() {
     return Row(
       children: [
         Expanded(
@@ -99,7 +121,7 @@ class ChatPage extends StatelessWidget{
         IconButton(
           onPressed: sendMessage,
           icon: const Icon(Icons.arrow_upward),
-        )
+        ),
       ],
     );
   }
