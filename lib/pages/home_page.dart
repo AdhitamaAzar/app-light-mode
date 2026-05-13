@@ -87,46 +87,66 @@ class HomePage extends StatelessWidget {
   }
 
   Widget _buildUserList() {
-    return StreamBuilder(
-      stream: _chatService.getUserStream(),
-      builder: (context, snapshot) {
-        // error
-        if (snapshot.hasError) {
-          return Center(
-            child: Text("Error: ${snapshot.error}"),
-          );
-        }
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _chatService.getChatRoomOrder().map((data) => data.cast<String, dynamic>()),
+      builder: (context, chatOrderSnapshot) {
+        return StreamBuilder(
+          stream: _chatService.getUserStream(),
+          builder: (context, snapshot) {
+            // error
+            if (snapshot.hasError) {
+              return Center(
+                child: Text("Error: ${snapshot.error}"),
+              );
+            }
 
-        // loading
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
+            // loading
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
 
-        // data kosong
-        if (!snapshot.hasData || snapshot.data == null) {
-          return const Center(
-            child: Text("Tidak ada user"),
-          );
-        }
+            // data kosong
+            if (!snapshot.hasData || snapshot.data == null) {
+              return const Center(
+                child: Text("Tidak ada user"),
+              );
+            }
 
-        final users = snapshot.data as List;
+            final users = snapshot.data as List;
 
-        final filteredUsers = users.where((user) {
-          return user["uid"] != _authService.getCurrentUser()!.uid;
-        }).toList();
+            final filteredUsers = users.where((user) {
+              return user["uid"] != _authService.getCurrentUser()!.uid;
+            }).toList();
 
-        if (filteredUsers.isEmpty) {
-          return const Center(
-            child: Text("Belum ada user lain"),
-          );
-        }
+            if (filteredUsers.isEmpty) {
+              return const Center(
+                child: Text("Belum ada user lain"),
+              );
+            }
 
-        return ListView(
-          children: filteredUsers
-              .map<Widget>((userData) => _buildUserListItem(userData, context))
-              .toList(),
+            // Urutkan berdasarkan pesan terakhir
+            final chatOrder = chatOrderSnapshot.data ?? {};
+            filteredUsers.sort((a, b) {
+              final aTime = chatOrder[a['uid']];
+              final bTime = chatOrder[b['uid']];
+
+              if (aTime != null && bTime != null) {
+                return (bTime as Comparable).compareTo(aTime);
+              }
+              if (aTime != null) return -1;
+              if (bTime != null) return 1;
+              return 0;
+            });
+
+            return ListView(
+              children: filteredUsers
+                  .map<Widget>(
+                      (userData) => _buildUserListItem(userData, context))
+                  .toList(),
+            );
+          },
         );
       },
     );
@@ -146,7 +166,7 @@ class HomePage extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (context) => ChatPage(
-              receiverEmail: userData["email"] ?? "",
+              receiverUsername: userData["username"] ?? userData["email"] ?? "Unknown",
               receiverID: userData["uid"],
             ),
           ),

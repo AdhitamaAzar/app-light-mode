@@ -61,6 +61,12 @@ class ChatService {
         .doc(chatRoomID)
         .collection("messages")
         .add(newMessage.toMap());
+
+    // Update chatRoom doc untuk sorting di home page
+    await _firestore.collection("chatRooms").doc(chatRoomID).set({
+      'participants': ids,
+      'lastMessageTimestamp': timestamp,
+    }, SetOptions(merge: true));
   }
 
   Stream<QuerySnapshot> getMessages(String userID, otherUserID) {
@@ -74,5 +80,71 @@ class ChatService {
         .collection("messages")
         .orderBy("timestamp", descending: false)
         .snapshots();
+  }
+
+  Future<void> deleteMessage(
+    String otherUserID,
+    String messageID,
+  ) async {
+    final String currentUserID = _auth.currentUser!.uid;
+
+    List<String> ids = [currentUserID, otherUserID];
+    ids.sort();
+    String chatRoomID = ids.join("_");
+
+    await _firestore
+        .collection("chatRooms")
+        .doc(chatRoomID)
+        .collection("messages")
+        .doc(messageID)
+        .delete();
+  }
+
+  Future<void> deleteChatRoom(String otherUserID) async {
+    final String currentUserID = _auth.currentUser!.uid;
+
+    List<String> ids = [currentUserID, otherUserID];
+    ids.sort();
+    String chatRoomID = ids.join("_");
+
+    final messagesRef = _firestore
+        .collection("chatRooms")
+        .doc(chatRoomID)
+        .collection("messages");
+
+    final snapshots = await messagesRef.get();
+    for (final doc in snapshots.docs) {
+      await doc.reference.delete();
+    }
+
+    await _firestore.collection("chatRooms").doc(chatRoomID).delete();
+  }
+
+  // Stream urutan chat berdasarkan pesan terakhir
+  Stream<Map<String, Timestamp>> getChatRoomOrder() {
+    final currentUserID = _auth.currentUser!.uid;
+
+    return _firestore
+        .collection("chatRooms")
+        .where('participants', arrayContains: currentUserID)
+        .snapshots()
+        .map((snapshot) {
+      Map<String, Timestamp> order = {};
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final participants = List<String>.from(data['participants'] ?? []);
+        final otherUID = participants.firstWhere(
+          (id) => id != currentUserID,
+          orElse: () => '',
+        );
+
+        if (otherUID.isNotEmpty && data['lastMessageTimestamp'] != null) {
+          order[otherUID] = data['lastMessageTimestamp'];
+        }
+      }
+
+      return order;
+    });
   }
 }
